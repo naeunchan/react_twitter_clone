@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { dbService } from "myBase";
+import { dbService, storageService } from "myBase";
 import Rweet from "components/Rweet";
+import { v4 as uuidv4 } from "uuid";
 
 const Home = ({ userObj }) => {
     const [rweet, setRweet] = useState("");
     const [rweets, setRweets] = useState([]);
+    const [attachment, setAttachment] = useState("");
 
     useEffect(() => {
         dbService.collection("rweets").onSnapshot((snapshot) => {
@@ -20,13 +22,24 @@ const Home = ({ userObj }) => {
     const handleSubmit = async (event) => {
         event.preventDefault();
 
-        await dbService.collection("rweets").add({
+        let attachmentUrl = "";
+
+        if (attachment !== "") {
+            const attachmentRef = storageService.ref().child(`${userObj.uid}/${uuidv4()}`);
+            const response = await attachmentRef.putString(attachment, "data_url");
+            attachmentUrl = await response.ref.getDownloadURL();
+        }
+
+        const rweetObj = {
             text: rweet,
             createdAt: Date.now(),
             creatorId: userObj.uid,
-        });
+            attachmentUrl,
+        };
 
+        await dbService.collection("rweets").add(rweetObj);
         setRweet("");
+        setAttachment("");
     };
 
     const handleChange = (event) => {
@@ -34,6 +47,21 @@ const Home = ({ userObj }) => {
 
         setRweet(value);
     };
+
+    const handleFileChange = (event) => {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+
+        reader.onloadend = (finishedEvent) => {
+            const { result } = finishedEvent.currentTarget;
+
+            setAttachment(result);
+        };
+
+        reader.readAsDataURL(file);
+    };
+
+    const handleClick = () => setAttachment("");
 
     return (
         <div>
@@ -45,7 +73,14 @@ const Home = ({ userObj }) => {
                     onChange={handleChange}
                     value={rweet}
                 />
+                <input type="file" accept="image/*" onChange={handleFileChange} />
                 <input type="submit" value="Rweet" />
+                {attachment && (
+                    <div>
+                        <img src={attachment} alt="uploaded file" width="50px" height="50px" />
+                        <button onClick={handleClick}>Clear</button>
+                    </div>
+                )}
             </form>
             <div>
                 {rweets.map((rweet) => (
